@@ -1,1 +1,133 @@
+# =========================================================
+# Transcription factor enrichment/activity from DESeq2
+# using DoRothEA regulons + decoupleR (human)
+# =========================================================
 
+# install.packages(c("dplyr", "tibble", "ggplot2", "readr"))
+# BiocManager::install(c("DESeq2", "dorothea", "decoupleR"))
+
+library(DESeq2)
+library(dplyr)
+library(tibble)
+library(ggplot2)
+library(readr)
+library(dorothea)
+library(decoupleR)
+
+# -------------------------
+# USER INPUTS
+# -------------------------
+
+# res <- results(dds, contrast = c("Disease.State", "BBS10", "Healthy"))
+
+outdir <- "TF_enrichment_results"
+dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
+
+# keep high-confidence TF regulons (A/B/C)
+dorothea_conf <- c("A", "B", "C")
+
+# -------------------------
+# 1) Build DE results table with SYMBOL
+# -------------------------
+res_df <- as.data.frame(res) %>%
+  rownames_to_column("ensembl") %>%
+  mutate(ensembl_clean = sub("\\..*$", "", ensembl))
+
+# Expect rowData(dds)$symbol already exists from your previous steps.
+# If not, map symbols first.
+if (!("symbol" %in% names(rowData(dds)))) {
+  stop("rowData(dds)$symbol not found. Add gene symbols to dds first.")
+}
+
+anno_df <- data.frame(
+  ensembl_clean = sub("\\..*$", "", rownames(dds)),
+  symbol = as.character(rowData(dds)$symbol),
+  stringsAsFactors = FALSE
+) %>%
+  distinct(ensembl_clean, .keep_all = TRUE)
+
+res_df <- res_df %>%
+  left_join(anno_df, by = "ensembl_clean") %>%
+  filter(!is.na(symbol), symbol != "") %>%
+  distinct(symbol, .keep_all = TRUE)
+
+# -------------------------
+# 2) Create stats matrix for decoupleR
+# decoupleR expects features x samples/contrasts matrix
+# Here we use one contrast vector: signed statistic
+# -------------------------
+# Prefer DESeq2 Wald statistic if available; fallback to log2FC
+score_col <- if ("stat" %in% colnames(res_df)) "stat" else "log2FoldChange"
+
+mat <- res_df %>%
+  select(symbol, all_of(score_col)) %>%
+  tibble::column_to_rownames("symbol") %>%
+  as.matrix()
+
+colnames(mat) <- "BBS10_vs_Healthy"
+
+# -------------------------
+# 3) Load DoRothEA regulons (human)
+# -------------------------
+data(dorothea_hs, package = "dorothea")
+
+regulons <- dorothea_hs %>%
+  filter(confidence %in% dorothea_conf) %>%
+  select(tf, target, mor)
+
+# -------------------------
+# 4) Run ULM (univariate linear model) TF activity
+# -------------------------
+tf_activity <- decoupleR::run_ulm(
+  mat = mat,
+  net = regulons,
+  .source = "tf",
+  .target = "target",
+  .mor = "mor",
+  minsize = 5
+)
+
+# tf_activity columns typically include: statistic, p_value, source(condition TF), etc.
+# Standardize column naming:
+tf_res <- tf_activity %>%
+  rename(
+    TF = source,
+    score = score,
+    pvalue = p_value
+  ) %>%
+  mutate(padj = p.adjust(pvalue, method = "BH")) %>%
+  arrange(padj)
+
+# Save table
+readr::write_csv(tf_res, file.path(outdir, "TF_activity_decoupleR_ULM.csv"))
+
+# -------------------------
+# 5) Plot top TFs
+# -------------------------
+top_n <- 20
+plot_df <- tf_res %>%
+  arrange(padj) %>%
+  slice_head(n = top_n) %>%
+  mutate(TF = reorder(TF, score))
+
+p_tf <- ggplot(plot_df, aes(x = TF, y = score, fill = score > 0)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_manual(values = c("TRUE" = "#d73027", "FALSE" = "#1d5fa2")) +
+  labs(
+    title = "Top TF activities (DoRothEA + decoupleR ULM)",
+    subtitle = "BBS10 vs Healthy",
+    x = "Transcription factor",
+    y = "Activity score",
+    fill = "Activated"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "right"
+  )
+
+print(p_tf)
+
+ggsave(file.path(outdir, "TF_activity_top20.png"), p_tf, width = 120, height = 100, units = "mm", dpi = 600)
+ggsave(file.path(outdir, "TF_activity_top20.pdf"), p_tf, width = 120, height = 100, units = "mm")
