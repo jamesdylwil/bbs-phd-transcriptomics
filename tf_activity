@@ -26,9 +26,9 @@ dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
 # keep high-confidence TF regulons (A/B/C)
 dorothea_conf <- c("A", "B", "C")
 
-# -------------------------
-# 1) Build DE results table with SYMBOL
-# -------------------------
+
+# Build DE results table
+
 res_df <- as.data.frame(res) %>%
   rownames_to_column("ensembl") %>%
   mutate(ensembl_clean = sub("\\..*$", "", ensembl))
@@ -51,12 +51,9 @@ res_df <- res_df %>%
   filter(!is.na(symbol), symbol != "") %>%
   distinct(symbol, .keep_all = TRUE)
 
-# -------------------------
-# 2) Create stats matrix for decoupleR
-# decoupleR expects features x samples/contrasts matrix
-# Here we use one contrast vector: signed statistic
-# -------------------------
-# Prefer DESeq2 Wald statistic if available; fallback to log2FC
+
+# 2) Create stats matrix for decoupleR - decoupleR expects features x samples/contrasts matrix
+#Prefer DESeq2 Wald statistic if available; fallback to log2FC
 score_col <- if ("stat" %in% colnames(res_df)) "stat" else "log2FoldChange"
 
 mat <- res_df %>%
@@ -66,18 +63,17 @@ mat <- res_df %>%
 
 colnames(mat) <- "BBS10_vs_Healthy"
 
-# -------------------------
-# 3) Load DoRothEA regulons (human)
-# -------------------------
+ Load DoRothEA regulons (human)
+
 data(dorothea_hs, package = "dorothea")
 
 regulons <- dorothea_hs %>%
   filter(confidence %in% dorothea_conf) %>%
   select(tf, target, mor)
 
-# -------------------------
-# 4) Run ULM (univariate linear model) TF activity
-# -------------------------
+
+# Run ULM (univariate linear model) TF activity using DecoupleR
+
 tf_activity <- decoupleR::run_ulm(
   mat = mat,
   net = regulons,
@@ -101,9 +97,9 @@ tf_res <- tf_activity %>%
 # Save table
 readr::write_csv(tf_res, file.path(outdir, "TF_activity_decoupleR_ULM.csv"))
 
-# -------------------------
-# 5) Plot top TFs
-# -------------------------
+
+# Plot top TFs
+
 top_n <- 20
 plot_df <- tf_res %>%
   arrange(padj) %>%
