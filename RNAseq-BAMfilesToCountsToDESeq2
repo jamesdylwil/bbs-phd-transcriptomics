@@ -1,0 +1,51 @@
+##Going from BAMfiles to DEseq2 results object. Easiest is BAMfiles are within working directory
+##Load packages. BiocManager::install("Rsubread") may be required to install Rsubread/ Rsamtools/txdbmaker
+
+library(Rsamtools)
+library(Rsubread)
+library(GenomicFeatures)
+library(GenomicAlignments)
+library(txdbmaker)
+
+###Set Working Directory to the location where the BAM files and the GTF files are stored, e.g. here it is in a folder called "BAMfiles"###
+setwd("/RNASeqData2018/BAMfiles")
+
+## look for all files in the current directory that end with 'bam'##
+bamfiles <- dir(".", "bam$")
+
+## load all those files into a BamFileList - for some reason it doesnt work here in the script, but does in the console?##
+bfl <- BamFileList(bamfiles)
+
+##get all GTF files ending 75.gtf (i.e. Homo_sapiens.GRCh37.75.gtf)##
+gtf.file <- dir(".","75.gtf$")
+
+### Make transcriptome database from the GTF file, then extract a GRanges list of genes from this transcript database###
+txdb <- makeTxDbFromGFF(gtf.file, format = "gtf")
+exons.by.gene <- exonsBy(txdb, by = "gene")
+
+###use summarizeOverlaps to output a summarized experiment object se, its columns = samples, rows = features. This may take a little while to run###
+se <- summarizeOverlaps(exons.by.gene, bamfiles, mode = "Union", singleEnd = FALSE, ignore.strand = TRUE, fragments = TRUE)
+
+### Import a csv file with information about the samples, (BAMfileName, Sample, Donor, Disease state) then use it for the column data in se###
+library(DESeq2)
+library(readxl)
+RNAseqSampleTable <- read_excel("RNAseqSampleTable.xlsx")
+colData(se) <- DataFrame(RNAseqSampleTable)
+
+###check the count table###
+head(assay(se))
+
+###Then we use this object and convert it to a DESeqDataSet, (MatrixHere, design = ~ "Factor1Here" + "AnotherFactorHereIfNeeded") ... Can set the design to (__= ~ 1) if unsure###
+dds <- DESeqDataSet(se, design = ~ Disease.State)
+dds <- estimateSizeFactors(dds)
+
+### Check the levels are correct, i.e using healthy as the reference ###
+levels(dds$Disease.State)
+
+###If they need to be changed to make Healthy the reference, use the following, and check###
+dds$Disease.State <- relevel(dds$Disease.State, "Healthy")
+levels(dds$Disease.State)
+
+### Run DESeq on the DESeq DataSet, and store the results as 'res'###
+dds <- DESeq(dds)
+res <- results(dds)
