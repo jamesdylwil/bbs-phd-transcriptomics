@@ -1,0 +1,31 @@
+##GO from DEseq Dataset based on DE genes (adjp<0.1) using clusterprofiler & enrichGO### 
+#table(res$padj <0.1)
+#
+# >FALSE  TRUE 
+# 22110   328
+# so only to only use DE genes, sort by p values and select for top 328
+resSort <- res[order(res$padj),]
+resSort10 <- resSort[1:328,]
+head(resSort10)
+
+##install some packages##
+BiocManager::install("clusterProfiler")
+BiocManager::install("AnnotationDbi")
+BiocManager::install("org.Hs.eg.db")
+BiocManager::install("enrichplot")
+library(clusterProfiler)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+library(enrichplot)
+
+##Take the rownames (which are ENSEMBLE gene Ids and put the in a list##)
+ENSEMBLIDs_resSort10 <- rownames(resSort10)
+
+##Run the GO
+GO_results_p10_0.2 <- enrichGO( gene = ENSEMBLIDs_resSort10, OrgDb = "org.Hs.eg.db", keyType = "ENSEMBL", ont = "ALL", pvalueCutoff = 0.2)
+GO_results_p10_0.2.df <- as.data.frame(GO_results_p10_0.2)
+
+#Plot the GO results (top few results as bars, and emap of terms)#
+fit <- plot(barplot(GO_results_p10_0.2, showCategory = 20))
+emapplot(pairwise_termsim(GO_results_p10_0.2))
+dotplot(GO_results_p10_0.2.df)
