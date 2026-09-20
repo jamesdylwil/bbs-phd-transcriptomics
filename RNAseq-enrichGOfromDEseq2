@@ -29,3 +29,77 @@ GO_results_p10_0.2.df <- as.data.frame(GO_results_p10_0.2)
 fit <- plot(barplot(GO_results_p10_0.2, showCategory = 20))
 emapplot(pairwise_termsim(GO_results_p10_0.2))
 dotplot(GO_results_p10_0.2.df)
+
+#################################
+#   Plotting genes by GO Term   #    
+#################################
+#Example subsetting the Sarcomere genes
+test_sarcomere_genes <- (GO_results_p10_0.2.df$geneID[1]) #get list of gene names as one long string#
+test_sarcomere_genes
+#manually split string into vector of ENSEMBL IDs
+[1] "ENSG00000163092/ENSG00000118729/ENSG00000077549/ENSG00000159251/ENSG00000168530/ENSG00000175183/ENSG00000120729/ENSG00000130598/ENSG00000157119/ENSG00000175084/ENSG00000141161/ENSG00000109061"
+sarcomere_genes <- c("ENSG00000163092", "ENSG00000118729","ENSG00000077549","ENSG00000159251","ENSG00000168530","ENSG00000175183","ENSG00000120729","ENSG00000130598","ENSG00000157119","ENSG00000175084","ENSG00000141161","ENSG00000109061")
+#Use vector to seect results rows
+Sarcomere_summary <- resSort.df[(sarcomere_genes),]
+Sarcomere_summary
+#baseMean log2FoldChange      lfcSE     stat       pvalue       padj symbol
+#ENSG00000163092   20.12055      2.7662794 0.69302170 3.991620 6.562342e-05 0.01752927  XIRP2
+#ENSG00000118729  172.04151      3.7504161 0.97996434 3.827095 1.296647e-04 0.02824677  CASQ2
+#ENSG00000077549 7098.35312      0.1592677 0.04249996 3.747478 1.786213e-04 0.03620036  CAPZB
+#ENSG00000159251 4126.97074      2.9247760 0.78423769 3.729451 1.918975e-04 0.03701424  ACTC1
+#ENSG00000168530  839.65462      3.9266069 1.05447994 3.723738 1.962947e-04 0.03732595   MYL1
+#ENSG00000175183 2383.51890      0.5253583 0.14406296 3.646727 2.656017e-04 0.04399242  CSRP2
+#ENSG00000120729   84.06602      3.6886246 1.02047109 3.614629 3.007778e-04 0.04719477   MYOT
+#ENSG00000130598   52.04573      3.9615570 1.12161684 3.532006 4.124206e-04 0.05452683  TNNI2
+#ENSG00000157119   70.15306      2.8686190 0.82263296 3.487119 4.882541e-04 0.05754055 KLHL40
+#ENSG00000175084  737.18049      2.5829943 0.75824899 3.406525 6.579546e-04 0.06750387    DES
+#ENSG00000141161   95.64908      3.5675338 1.07634413 3.314492 9.180989e-04 0.07983115 UNC45B
+#ENSG00000109061    5.78203      2.9055189 0.87794812 3.309443 9.348195e-04 0.08005908   MYH1
+#then get gene info from BiomaRt using ensembl IDs#
+
+BiocManager::install("bioMart")
+library(biomaRt)
+ensembl_75 <- useEnsembl(biomart = 'genes', dataset = 'hsapiens_gene_ensembl', version = 75) #if lookup fails at .getArchiveList step, try replacing "version = 75" with "GRCh = 37" 
+listAttributes(ensembl_75) #will print attributes found, so choose from the list#
+
+#Get Gene IDs and description to match to results
+sarcomeregeneinfo <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id', 'description'), filters = 'ensembl_gene_id', values = sarcomere_genes, mart = ensembl_75)
+sarcomeregeneinfo
+#external_gene_name ensembl_gene_id
+#1             CAPZB ENSG00000077549
+#2              MYH1 ENSG00000109061
+#3             CASQ2 ENSG00000118729
+#4              MYOT ENSG00000120729
+#5             TNNI2 ENSG00000130598
+#6            UNC45B ENSG00000141161
+#7            KLHL40 ENSG00000157119
+#8             ACTC1 ENSG00000159251
+#9             XIRP2 ENSG00000163092
+#10             MYL1 ENSG00000168530
+#11              DES ENSG00000175084
+#12            CSRP2 ENSG00000175183
+#description
+#1  capping protein (actin filament) muscle Z-line, beta [Source:HGNC Symbol;Acc:1491]
+#2         myosin, heavy chain 1, skeletal muscle, adult [Source:HGNC Symbol;Acc:7567]
+#3                      calsequestrin 2 (cardiac muscle) [Source:HGNC Symbol;Acc:1513]
+#4                                             myotilin [Source:HGNC Symbol;Acc:12399]
+#5                   troponin I type 2 (skeletal, fast) [Source:HGNC Symbol;Acc:11946]
+#6                        unc-45 homolog B (C. elegans) [Source:HGNC Symbol;Acc:14304]
+#7                          kelch-like family member 40 [Source:HGNC Symbol;Acc:30372]
+#8                         actin, alpha, cardiac muscle 1 [Source:HGNC Symbol;Acc:143]
+#9                xin actin-binding repeat containing 2 [Source:HGNC Symbol;Acc:14303]
+#10        myosin, light chain 1, alkali; skeletal, fast [Source:HGNC Symbol;Acc:7582]
+#11                                               desmin [Source:HGNC Symbol;Acc:2770]
+#12                  cysteine and glycine-rich protein 2 [Source:HGNC Symbol;Acc:2470]
+
+#Sort results by row names so it aligns with BiomaRt rows
+Sarcomere_summary <- Sarcomere_summary[order(row.names(Sarcomere_summary)),]
+#bind results to gene info, check IDs match
+SarcomereSummary <- cbind(Sarcomere_summary,sarcomeregeneinfo)
+SarcomereSummary
+
+library(writexl)
+write_xlsx(SarcomereSummary, "SarcomereGenesSummary")
+
+### Plot these genes
+ggplot(SarcomereGenesSummary, aes(log2FoldChange, reorder(symbol, log2FoldChange))) + geom_segment(aes(xend = 0, yend = symbol)) + geom_point(aes(colour = padj, size = baseMean)) + scale_color_gradientn(colours = c("red", "violet","blue" ), trans = "log10", guide = guide_colorbar(reverse = TRUE, order = 1)) + xlab("Log2 Fold Change") + ylab(NULL) + ggtitle("DE genes in Ribosomal GO term")
