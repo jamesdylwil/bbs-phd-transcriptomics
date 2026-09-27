@@ -1,0 +1,51 @@
+library(DESeq2)
+library(ggplot2)
+library(ggpubr)
+library(ggbeeswarm)
+
+## define function entitled "plot_gene_by_donor" ##
+
+plot_gene_by_donor <- function(dds_obj,
+                               gene_id,
+                               disease_var = "Disease.State",
+                               donor_var   = "Donor",
+                               symbol_label = NULL) {
+  df <- plotCounts(dds_obj, gene = gene_id,
+                   intgroup = c(disease_var, donor_var),
+                   returnData = TRUE)
+  
+  if (is.null(symbol_label) || is.na(symbol_label) || symbol_label == "") {
+    symbol_label <- gene_id
+  }
+  
+  ggplot(df, aes(x = .data[[disease_var]], y = count)) +
+    geom_boxplot(
+      aes(fill = .data[[disease_var]], group = .data[[disease_var]]),
+      width = 0.85, outlier.shape = NA,
+      alpha = 0.75, color = "black", linewidth = 0.5
+    ) +
+    geom_quasirandom(
+      aes(color = .data[[donor_var]]),
+      width = 0.22, varwidth = FALSE, size = 4, alpha = 0.95, stroke = 1,
+    ) +
+    scale_y_log10() + scale_fill_manual(values = c("Healthy" = "#8ecae6", "BBS10" = "#d73027")) +
+    labs(
+      title = paste0(symbol_label, " (", gene_id, ")"),
+      x = disease_var,
+      y = "Normalized count (log10 scale)",
+      color = donor_var
+    ) +
+    theme_classic(base_size = 13)
+  
+  return(p)
+}
+
+
+
+p <- plot_gene_by_donor(
+  dds_obj = dds,
+  gene_id = "ENSG00000115415",   # replace with chosen gene's ENSEMBL ID
+  disease_var = "Disease.State",
+  donor_var = "Donor"
+)
+p
