@@ -1,0 +1,86 @@
+# PCA plot (DESeq2)
+# - color/fill by Disease.State
+# - shape by Donor
+
+library(DESeq2)
+library(ggplot2)
+library(dplyr)
+library(ggrepel)
+
+
+# Set inputs & Create output folder
+
+disease_var <- "Disease.State"
+donor_var   <- "Donor"
+group_order <- c("Healthy", "BBS10")
+outdir <- "PCA_plotbydonor"
+dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
+
+# Optional: label points by sample name column in colData(dds)
+# set to NULL to disable labels
+sample_label_var <- "Sample"   # or NULL
+
+
+# Transform counts for PCA (blind=TRUE gives unsupervised PCA) 
+vsd <- vst(dds, blind = TRUE)
+
+# Get PCA coordinates
+pca_df <- plotPCA(vsd, intgroup = c(disease_var, donor_var), returnData = TRUE)
+percentVar <- round(100 * attr(pca_df, "percentVar"), 1)
+
+# enforce disease order
+pca_df[[disease_var]] <- factor(pca_df[[disease_var]], levels = group_order)
+
+
+# Generate PCA plot #
+
+p_pca <- ggplot(
+  pca_df,
+  aes(x = PC1, y = PC2,
+      color = .data[[disease_var]],
+      fill  = .data[[disease_var]],
+      shape = .data[[donor_var]])
+) +
+  geom_point(size = 3.6, alpha = 0.95, stroke = 0.8) +
+  scale_color_manual(values = c("Healthy" = "#1d5fa2", "BBS10" = "#a50f15")) +
+  scale_fill_manual(values  = c("Healthy" = "#8ecae6", "BBS10" = "#d73027")) +
+  labs(
+    title = "PCA of RNA-seq samples",
+    x = paste0("PC1 (", percentVar[1], "% variance)"),
+    y = paste0("PC2 (", percentVar[2], "% variance)"),
+    color = "Disease state",
+    fill  = "Disease state",
+    shape = "Donor"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold"),
+    legend.position = "right"
+  )
+
+# Optional sample labels
+if (!is.null(sample_label_var) && sample_label_var %in% colnames(colData(dds))) {
+  pca_df$sample_label <- as.character(colData(dds)[[sample_label_var]])
+  p_pca <- p_pca +
+    ggrepel::geom_text_repel(
+      data = pca_df,
+      aes(label = sample_label),
+      size = 3.2,
+      max.overlaps = 100,
+      show.legend = FALSE
+    )
+}
+
+print(p_pca)
+
+
+# Save outputs
+ggsave(file.path(outdir, "PCA_plotbydonor.png"),
+       p_pca, width = 110, height = 90, units = "mm", dpi = 600)
+
+ggsave(file.path(outdir, "PCA_plotbydonor.tiff"),
+       p_pca, width = 110, height = 90, units = "mm", dpi = 600, compression = "lzw")
+
+ggsave(file.path(outdir, "PCA_plotbydonor.pdf"),
+       p_pca, width = 110, height = 90, units = "mm")
